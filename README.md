@@ -2,7 +2,7 @@
 
 Cuttle is a local-first desktop engineering workspace that turns meeting notes, tickets, stack traces, and bug reports into actionable tasks. It provides reviewable patch previews, regression-test stubs, real local Git history, and copy-only recovery commands.
 
-## Judge quick start Ã¢â‚¬â€ no rebuild required
+## Judge quick start — no rebuild required
 
 The ready-to-run Windows package is in **release/PatchTrail-windows-x64.zip**.
 
