@@ -104,7 +104,7 @@ PatchTrail was brainstormed in Codex, planned in Codex, and built collaborativel
 
 Codex accelerated the workflow by keeping the first version deterministic and local: task extraction, patch previews, regression-test stubs, demo history, and the activity ledger work without external API credentials. Key product decisions were made deliberately: advanced features stay behind focused controls, patches require review, and Git recovery commands are copy-only.
 
-Project Codex Session ID: 019f75e1-7962-77c1-89ea-d76694d1d97d
+Codex Session ID for /feedback: 019f75e1-7962-77c1-89ea-d76694d1d97d
 
 The exact GPT-5.6 model label should be confirmed in the Codex model picker before submitting. The submission package includes SUBMISSION.md and DEMO_VIDEO_SCRIPT.md for the remaining manual hackathon fields.
 

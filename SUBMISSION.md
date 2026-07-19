@@ -23,7 +23,7 @@ Codex accelerated the workflow by keeping the core experience local and determin
 
 GPT-5.6/Codex contribution note: confirm the exact model label shown in the Codex model picker before submitting. The core implementation thread is:
 
-Codex Session ID: 019f75e1-7962-77c1-89ea-d76694d1d97d
+Codex Session ID for /feedback: 019f75e1-7962-77c1-89ea-d76694d1d97d
 
 ## Video requirement
 
