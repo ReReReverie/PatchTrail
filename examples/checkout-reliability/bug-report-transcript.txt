@@ -1,4 +1,4 @@
-﻿Checkout reliability triage â€” Cuttle demo
+﻿Checkout reliability triage — Cuttle demo
 
 @Mika: Checkout succeeds with HTTP 204 after a coupon is accepted, but examples/checkout-reliability/buggy-checkout.ts calls response.json() and throws because the response has no body. Fix the empty-response handling. This is release-blocking.
 

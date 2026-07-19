@@ -8,7 +8,7 @@ The ready-to-run Windows package is in **release/PatchTrail-windows-x64.zip**.
 
 1. Extract the ZIP.
 2. Run **PatchTrail.exe**.
-3. If Windows SmartScreen appears, choose **More info Ã¢â€ â€™ Run anyway**. The prototype is not code-signed.
+3. If Windows SmartScreen appears, choose **More info → Run anyway**. The prototype is not code-signed.
 4. Use the included sample context and select **Extract tasks**.
 5. Select a task, choose **Analyze bug**, review the patch, and open **Regression tests**.
 6. Open **Git history**. The bundled demo data works without setup; select **Choose repository** to test against any local Git repository.
@@ -89,7 +89,7 @@ The local provider accepts OpenAI-compatible `/v1/chat/completions` servers on `
 
 ## Product rules
 
-- The main flow is paste context Ã¢â€ â€™ identify bug Ã¢â€ â€™ review fix Ã¢â€ â€™ approve.
+- The main flow is paste context → identify bug → review fix → approve.
 - Do not display a numeric confidence score.
 - Git history remains optional and hidden behind a button.
 - Review patches before applying them.

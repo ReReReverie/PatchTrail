@@ -2,7 +2,7 @@
 
 ## Recommended category
 
-Dev Tools Ã¢â‚¬â€ developer productivity, bug triage, code review, and safe Git recovery.
+Dev Tools — developer productivity, bug triage, code review, and safe Git recovery.
 
 ## Project description
 
