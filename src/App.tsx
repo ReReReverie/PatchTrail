@@ -45,6 +45,13 @@ interface AiInsight {
   provider: string;
 }
 
+interface VerificationResult {
+  passed: boolean;
+  appliedPatch: boolean;
+  checks: { name: string; status: string; output: string }[];
+  summary: string;
+}
+
 interface ProviderDetails {
   name: string;
   description: string;
@@ -140,6 +147,33 @@ const FALLBACK_FILES = [
   "src/components/RetryBanner.tsx",
   "tests/checkout.test.ts",
 ];
+
+const OFFLINE_PATCH = `diff --git a/examples/buggy-checkout.ts b/examples/buggy-checkout.ts
+--- a/examples/buggy-checkout.ts
++++ b/examples/buggy-checkout.ts
+@@ -14,17 +14,15 @@ export async function submitCheckout(
+   }
+ 
+-  // BUG 1: a successful 204 response has no body, so response.json() throws.
+-  return response.json() as Promise<CheckoutResponse>;
++  if (response.status === 204) return null;
++  return response.json() as Promise<CheckoutResponse>;
+ }
+ 
+ export function applyCoupon(total: number, discount: number | undefined): number {
+-  // BUG 2: an absent discount creates NaN and poisons the order total.
+-  return total - (discount as number);
++  return total - (discount ?? 0);
+ }
+ 
+ export function shouldShowRetryBanner(
+   paymentStatus: "idle" | "processing" | "success" | "failed",
+ ): boolean {
+-  // BUG 3: the banner remains visible after a successful payment.
+-  return paymentStatus !== "idle";
++  return paymentStatus === "processing" || paymentStatus === "failed";
+ }
+`;
 
 const priorityRank: Record<Priority, number> = { critical: 4, high: 3, medium: 2, low: 1 };
 const isTauri = () => "__TAURI_INTERNALS__" in window;
@@ -243,6 +277,8 @@ export default function App() {
   const [localBaseUrl, setLocalBaseUrl] = useState("http://127.0.0.1:11434/v1");
   const [providerOpen, setProviderOpen] = useState(false);
   const [aiInsight, setAiInsight] = useState<AiInsight | null>(null);
+  const [verifying, setVerifying] = useState(false);
+  const [verification, setVerification] = useState<VerificationResult | null>(null);
   const contextFileInput = useRef<HTMLInputElement>(null);
 
   const selectedTask = tasks.find((task) => task.id === selectedId) ?? null;
@@ -377,6 +413,33 @@ export default function App() {
     if (!selectedTask) return;
     updateTask(selectedTask.id, { status: "done" });
     addActivity("success", "Approved patch for " + selectedTask.file);
+  };
+
+  const verifySelectedPatch = async () => {
+    if (!selectedTask || verifying) return;
+    if (!isTauri()) {
+      addActivity("warn", "Verification requires the desktop app");
+      return;
+    }
+    if (!repoPath) {
+      setGitOpen(true);
+      addActivity("warn", "Choose a Git repository before verifying");
+      return;
+    }
+    setVerifying(true);
+    setVerification(null);
+    try {
+      const result = await invoke<VerificationResult>("verify_patch", {
+        repoPath,
+        patch: provider === "offline" ? OFFLINE_PATCH : "",
+      });
+      setVerification(result);
+      addActivity(result.passed ? "success" : "warn", result.summary);
+    } catch (error) {
+      addActivity("warn", "Verification failed: " + String(error));
+    } finally {
+      setVerifying(false);
+    }
   };
 
   const copyText = async (label: string, value: string, type: EventType = "info") => {
@@ -644,6 +707,8 @@ export default function App() {
                   onClick={() => {
                     setSelectedId(task.id);
                     setAiInsight(null);
+                    setVerification(null);
+                    setReviewTab("patch");
                     setAnalyzedTaskIds((current) => {
                       const next = new Set(current);
                       next.delete(task.id);
@@ -742,11 +807,33 @@ export default function App() {
                         </div>
                         <div className="patch-actions">
                           <span><ShieldCheck size={14} /> Review required · no files changed yet</span>
+                          <button className="secondary-button" onClick={verifySelectedPatch} disabled={verifying} title={repoPath ? "Run isolated verification checks" : "Choose a repository in Git history first"}>
+                            {verifying ? <LoaderCircle className="spin" size={14} /> : <ShieldCheck size={14} />}
+                            {verifying ? "Verifying…" : provider === "offline" ? "Verify patch" : "Run checks"}
+                          </button>
                           <button className="approve-button" onClick={approveFix} disabled={selectedTask.status === "done"}>
                             {selectedTask.status === "done" ? <Check size={16} /> : <Sparkles size={16} />}
                             {selectedTask.status === "done" ? "Patch approved" : "Approve fix"}
                           </button>
                         </div>
+                        {verification && (
+                          <div className={"verification-card " + (verification.passed ? "passed" : "failed")} aria-live="polite">
+                            <div className="verification-heading">
+                              <ShieldCheck size={15} />
+                              <strong>{verification.passed ? "Verification passed" : "Verification needs attention"}</strong>
+                              <span>{verification.appliedPatch ? "Patch tested in isolated worktree" : "Checks ran without applying a patch"}</span>
+                            </div>
+                            <p>{verification.summary}</p>
+                            <div className="verification-checks">
+                              {verification.checks.map((check) => (
+                                <div className="verification-check" key={check.name}>
+                                  <span className={"verification-status " + check.status}>{check.status === "passed" ? "✓" : "!"}</span>
+                                  <span>{check.name}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="tests-card">

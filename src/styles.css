@@ -308,6 +308,18 @@ main { width: min(1380px, calc(100% - 56px)); margin: 0 auto; }
 .patch-actions { justify-content: space-between; gap: 15px; padding: 11px 12px; border-top: 1px solid var(--line); }
 .patch-actions > span { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 9px; }
 .approve-button { min-height: 32px; }
+.patch-actions .secondary-button { min-height: 32px; margin-left: auto; }
+.verification-card { padding: 13px 14px; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--surface-raised) 88%, var(--teal)); }
+.verification-card.failed { background: color-mix(in srgb, var(--surface-raised) 88%, var(--coral)); }
+.verification-heading { display: flex; align-items: center; gap: 7px; font-size: 11px; }
+.verification-heading svg { color: var(--teal); }
+.verification-card.failed .verification-heading svg { color: var(--coral); }
+.verification-heading span { margin-left: auto; color: var(--muted); font-size: 9px; }
+.verification-card p { margin: 7px 0 10px; color: var(--muted); font-size: 10px; }
+.verification-checks { display: flex; flex-wrap: wrap; gap: 7px 15px; }
+.verification-check { display: flex; align-items: center; gap: 6px; color: var(--text); font-size: 10px; }
+.verification-status { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: var(--teal); color: #07100d; font-weight: 800; }
+.verification-status.failed { background: var(--coral); color: white; }
 .tests-card { padding: 4px 12px; }
 .test-item { justify-content: space-between; min-height: 58px; border-bottom: 1px solid var(--line); }
 .test-item:last-child { border-bottom: 0; }

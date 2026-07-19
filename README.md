@@ -63,6 +63,7 @@ The submitted binary is Windows x64 only. The React/Tauri source is cross-platfo
 - Editable priority, owner, and status
 - Reviewable patch diff with plain-English root-cause guidance
 - Copyable regression-test stubs
+- Isolated patch verification in a temporary Git worktree, with available project tests and builds
 - Native folder picker and Rust-backed Git history for a selected repository
 - Safe branch, detached exploration, and single-file recovery commands
 - Clearly separated hard-reset command with a destructive warning

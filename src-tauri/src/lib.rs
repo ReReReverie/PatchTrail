@@ -1,6 +1,7 @@
-﻿use serde::Serialize;
+use serde::Serialize;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Output};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -25,7 +26,8 @@ fn repository_path(value: &str) -> Result<PathBuf, String> {
 }
 
 fn validate_hash(hash: &str) -> Result<&str, String> {
-    if (4..=40).contains(&hash.len()) && hash.chars().all(|character| character.is_ascii_hexdigit()) {
+    if (4..=40).contains(&hash.len()) && hash.chars().all(|character| character.is_ascii_hexdigit())
+    {
         Ok(hash)
     } else {
         Err("Invalid commit hash.".to_string())
@@ -43,10 +45,117 @@ fn run_git(repo_path: &str, args: &[&str]) -> Result<String, String> {
 
     if !output.status.success() {
         let error = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(if error.is_empty() { "Git command failed.".to_string() } else { error });
+        return Err(if error.is_empty() {
+            "Git command failed.".to_string()
+        } else {
+            error
+        });
     }
 
     String::from_utf8(output.stdout).map_err(|_| "Git returned unreadable output.".to_string())
+}
+
+#[tauri::command]
+fn verify_patch(repo_path: String, patch: String) -> Result<VerificationResult, String> {
+    let repository = repository_path(&repo_path)?;
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let worktree =
+        std::env::temp_dir().join(format!("patchtrail-{}-{}", std::process::id(), stamp));
+    let worktree_text = worktree.to_string_lossy().to_string();
+    let add_args = [
+        "worktree",
+        "add",
+        "--detach",
+        worktree_text.as_str(),
+        "HEAD",
+    ];
+    let added = run_git_at(&repository, &add_args)?;
+    if !added.status.success() {
+        let message = String::from_utf8_lossy(&added.stderr).trim().to_string();
+        return Err(if message.is_empty() {
+            "Could not create an isolated Git worktree.".to_string()
+        } else {
+            message
+        });
+    }
+
+    let result = (|| {
+        let mut applied_patch = false;
+        if !patch.trim().is_empty() {
+            let patch_file = worktree.join(".patchtrail.patch");
+            std::fs::write(&patch_file, patch)
+                .map_err(|_| "Could not prepare the patch in the isolated worktree.".to_string())?;
+            let patch_path = patch_file.to_string_lossy().to_string();
+            let check_args = ["apply", "--check", patch_path.as_str()];
+            let checked = run_git_at(&worktree, &check_args)?;
+            if !checked.status.success() {
+                let message = String::from_utf8_lossy(&checked.stderr).trim().to_string();
+                return Ok(VerificationResult {
+                    passed: false,
+                    applied_patch: false,
+                    checks: vec![VerificationCheck {
+                        name: "Patch applies cleanly".to_string(),
+                        status: "failed".to_string(),
+                        output: message,
+                    }],
+                    summary: "The proposed patch could not be applied in an isolated worktree."
+                        .to_string(),
+                });
+            }
+            let apply_args = ["apply", patch_path.as_str()];
+            let applied = run_git_at(&worktree, &apply_args)?;
+            if !applied.status.success() {
+                return Err(String::from_utf8_lossy(&applied.stderr).trim().to_string());
+            }
+            applied_patch = true;
+            let _ = std::fs::remove_file(patch_file);
+        }
+
+        let mut checks = vec![VerificationCheck {
+            name: if applied_patch {
+                "Patch applies cleanly"
+            } else {
+                "Isolated worktree created"
+            }
+            .to_string(),
+            status: "passed".to_string(),
+            output: if applied_patch {
+                "The patch applied without modifying the selected repository."
+            } else {
+                "Checks ran without applying a patch."
+            }
+            .to_string(),
+        }];
+        if command_exists_in_package_json(&worktree, "test") {
+            checks.push(run_check(&worktree, "Project tests", "npm test"));
+        }
+        if command_exists_in_package_json(&worktree, "build") {
+            checks.push(run_check(&worktree, "Project build", "npm run build"));
+        }
+        if worktree.join("Cargo.toml").exists() {
+            checks.push(run_check(&worktree, "Rust tests", "cargo test"));
+        }
+        let passed = checks.iter().all(|check| check.status == "passed");
+        Ok(VerificationResult {
+            passed,
+            applied_patch,
+            checks,
+            summary: if passed {
+                "All available verification checks passed in isolation."
+            } else {
+                "One or more verification checks failed."
+            }
+            .to_string(),
+        })
+    })();
+
+    let remove_args = ["worktree", "remove", "--force", worktree_text.as_str()];
+    let _ = run_git_at(&repository, &remove_args);
+    let _ = std::fs::remove_dir_all(&worktree);
+    result
 }
 
 #[tauri::command]
@@ -82,7 +191,13 @@ fn git_commit_files(repo_path: String, hash: String) -> Result<Vec<String>, Stri
     let safe_hash = validate_hash(&hash)?;
     let output = run_git(
         &repo_path,
-        &["show", "--name-only", "--format=", "--no-renames", safe_hash],
+        &[
+            "show",
+            "--name-only",
+            "--format=",
+            "--no-renames",
+            safe_hash,
+        ],
     )?;
 
     Ok(output
@@ -104,7 +219,13 @@ fn git_diff(repo_path: String, hash: String) -> Result<String, String> {
     let safe_hash = validate_hash(&hash)?;
     let output = run_git(
         &repo_path,
-        &["show", "--format=", "--no-ext-diff", "--unified=3", safe_hash],
+        &[
+            "show",
+            "--format=",
+            "--no-ext-diff",
+            "--unified=3",
+            safe_hash,
+        ],
     )?;
     Ok(output.chars().take(120_000).collect())
 }
@@ -130,24 +251,41 @@ fn responses_text(value: &serde_json::Value) -> Option<String> {
         }
     }
 
-    value.get("output")?.as_array()?
+    value
+        .get("output")?
+        .as_array()?
         .iter()
-        .flat_map(|item| item.get("content").and_then(|content| content.as_array()).into_iter().flatten())
+        .flat_map(|item| {
+            item.get("content")
+                .and_then(|content| content.as_array())
+                .into_iter()
+                .flatten()
+        })
         .filter_map(|content| content.get("text").and_then(|text| text.as_str()))
         .find(|text| !text.trim().is_empty())
         .map(ToOwned::to_owned)
 }
 
 fn chat_text(value: &serde_json::Value) -> Option<String> {
-    value.get("choices")?.as_array()?.first()?
-        .get("message")?.get("content")?.as_str()
+    value
+        .get("choices")?
+        .as_array()?
+        .first()?
+        .get("message")?
+        .get("content")?
+        .as_str()
         .filter(|text| !text.trim().is_empty())
         .map(ToOwned::to_owned)
 }
 
 fn gemini_text(value: &serde_json::Value) -> Option<String> {
-    value.get("candidates")?.as_array()?.first()?
-        .get("content")?.get("parts")?.as_array()?
+    value
+        .get("candidates")?
+        .as_array()?
+        .first()?
+        .get("content")?
+        .get("parts")?
+        .as_array()?
         .iter()
         .filter_map(|part| part.get("text").and_then(|text| text.as_str()))
         .find(|text| !text.trim().is_empty())
@@ -161,8 +299,13 @@ fn local_chat_url(value: &str) -> Result<reqwest::Url, String> {
     if !matches!(host, "localhost" | "127.0.0.1" | "::1" | "[::1]") {
         return Err("Local model servers must use localhost or a loopback address.".to_string());
     }
-    if !matches!(url.scheme(), "http" | "https") || !url.username().is_empty() || url.password().is_some() {
-        return Err("The local model URL must use HTTP(S) without embedded credentials.".to_string());
+    if !matches!(url.scheme(), "http" | "https")
+        || !url.username().is_empty()
+        || url.password().is_some()
+    {
+        return Err(
+            "The local model URL must use HTTP(S) without embedded credentials.".to_string(),
+        );
     }
     if url.query().is_some() || url.fragment().is_some() {
         return Err("The local model URL cannot include a query or fragment.".to_string());
@@ -180,9 +323,14 @@ fn local_chat_url(value: &str) -> Result<reqwest::Url, String> {
     Ok(url)
 }
 
-async fn response_json(response: reqwest::Response, provider: &str) -> Result<serde_json::Value, String> {
+async fn response_json(
+    response: reqwest::Response,
+    provider: &str,
+) -> Result<serde_json::Value, String> {
     let status = response.status();
-    let raw = response.text().await
+    let raw = response
+        .text()
+        .await
         .map_err(|_| format!("{provider} returned unreadable output."))?;
     if !status.is_success() {
         return Err(format!("{provider} request failed ({}). Check the key, model access, billing, and local server status.", status.as_u16()));
@@ -206,7 +354,11 @@ async fn ai_analyze(
     if requested_model.is_empty() || requested_model.len() > 120 {
         return Err("Enter a valid model name.".to_string());
     }
-    if provider == "gemini" && !requested_model.chars().all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.')) {
+    if provider == "gemini"
+        && !requested_model.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.')
+        })
+    {
         return Err("The Gemini model name contains unsupported characters.".to_string());
     }
     if provider != "local" && key.is_empty() {
@@ -223,29 +375,45 @@ async fn ai_analyze(
     let (label, text) = match provider.as_str() {
         "openai" => {
             let body = serde_json::json!({ "model": requested_model, "input": prompt });
-            let response = client.post("https://api.openai.com/v1/responses")
-                .bearer_auth(key).json(&body).send().await
+            let response = client
+                .post("https://api.openai.com/v1/responses")
+                .bearer_auth(key)
+                .json(&body)
+                .send()
+                .await
                 .map_err(|_| "Could not reach the OpenAI API.".to_string())?;
             let value = response_json(response, "OpenAI").await?;
-            let text = responses_text(&value).ok_or_else(|| "OpenAI returned no analysis text.".to_string())?;
+            let text = responses_text(&value)
+                .ok_or_else(|| "OpenAI returned no analysis text.".to_string())?;
             ("OpenAI", text)
         }
         "gemini" => {
             let endpoint = format!("https://generativelanguage.googleapis.com/v1beta/models/{requested_model}:generateContent");
             let body = serde_json::json!({ "contents": [{ "parts": [{ "text": prompt }] }] });
-            let response = client.post(endpoint).header("x-goog-api-key", key).json(&body).send().await
+            let response = client
+                .post(endpoint)
+                .header("x-goog-api-key", key)
+                .json(&body)
+                .send()
+                .await
                 .map_err(|_| "Could not reach the Gemini API.".to_string())?;
             let value = response_json(response, "Gemini").await?;
-            let text = gemini_text(&value).ok_or_else(|| "Gemini returned no analysis text.".to_string())?;
+            let text = gemini_text(&value)
+                .ok_or_else(|| "Gemini returned no analysis text.".to_string())?;
             ("Gemini", text)
         }
         "grok" => {
             let body = serde_json::json!({ "model": requested_model, "input": prompt });
-            let response = client.post("https://api.x.ai/v1/responses")
-                .bearer_auth(key).json(&body).send().await
+            let response = client
+                .post("https://api.x.ai/v1/responses")
+                .bearer_auth(key)
+                .json(&body)
+                .send()
+                .await
                 .map_err(|_| "Could not reach the xAI API.".to_string())?;
             let value = response_json(response, "Grok").await?;
-            let text = responses_text(&value).ok_or_else(|| "Grok returned no analysis text.".to_string())?;
+            let text = responses_text(&value)
+                .ok_or_else(|| "Grok returned no analysis text.".to_string())?;
             ("Grok", text)
         }
         "local" => {
@@ -262,7 +430,8 @@ async fn ai_analyze(
             let response = request.send().await
                 .map_err(|_| "Could not reach the local model server. Confirm that Ollama or LM Studio is running.".to_string())?;
             let value = response_json(response, "Local model").await?;
-            let text = chat_text(&value).or_else(|| responses_text(&value))
+            let text = chat_text(&value)
+                .or_else(|| responses_text(&value))
                 .ok_or_else(|| "The local model returned no analysis text.".to_string())?;
             ("Local model", text)
         }
@@ -291,7 +460,8 @@ mod ai_tests {
     fn parses_supported_response_shapes() {
         let responses = serde_json::json!({"output": [{"content": [{"type": "output_text", "text": "result"}]}]});
         let chat = serde_json::json!({"choices": [{"message": {"content": "result"}}]});
-        let gemini = serde_json::json!({"candidates": [{"content": {"parts": [{"text": "result"}]}}]});
+        let gemini =
+            serde_json::json!({"candidates": [{"content": {"parts": [{"text": "result"}]}}]});
         assert_eq!(responses_text(&responses).as_deref(), Some("result"));
         assert_eq!(chat_text(&chat).as_deref(), Some("result"));
         assert_eq!(gemini_text(&gemini).as_deref(), Some("result"));
@@ -306,8 +476,84 @@ pub fn run() {
             git_commit_files,
             git_status,
             git_diff,
+            verify_patch,
             ai_analyze
         ])
         .run(tauri::generate_context!())
         .expect("error while running PatchTrail");
+}
+
+fn run_git_at(repository: &Path, args: &[&str]) -> Result<Output, String> {
+    Command::new("git")
+        .arg("-C")
+        .arg(repository)
+        .args(args)
+        .output()
+        .map_err(|_| "Git is not installed or could not be started.".to_string())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VerificationCheck {
+    name: String,
+    status: String,
+    output: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VerificationResult {
+    passed: bool,
+    applied_patch: bool,
+    checks: Vec<VerificationCheck>,
+    summary: String,
+}
+
+fn command_exists_in_package_json(repository: &Path, script: &str) -> bool {
+    let package = repository.join("package.json");
+    let Ok(raw) = std::fs::read_to_string(package) else {
+        return false;
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&raw) else {
+        return false;
+    };
+    value
+        .get("scripts")
+        .and_then(|scripts| scripts.get(script))
+        .is_some()
+}
+
+fn run_check(repository: &Path, name: &str, command: &str) -> VerificationCheck {
+    #[cfg(windows)]
+    let result = Command::new("cmd")
+        .args(["/C", command])
+        .current_dir(repository)
+        .output();
+    #[cfg(not(windows))]
+    let result = Command::new("sh")
+        .args(["-lc", command])
+        .current_dir(repository)
+        .output();
+
+    match result {
+        Ok(output) => {
+            let mut text = String::from_utf8_lossy(&output.stdout).to_string();
+            text.push_str(&String::from_utf8_lossy(&output.stderr));
+            VerificationCheck {
+                name: name.to_string(),
+                status: if output.status.success() {
+                    "passed"
+                } else {
+                    "failed"
+                }
+                .to_string(),
+                output: text.trim().chars().take(12_000).collect(),
+            }
+        }
+        Err(error) => VerificationCheck {
+            name: name.to_string(),
+            status: "failed".to_string(),
+            output: error.to_string(),
+        },
+    }
 }
