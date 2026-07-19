@@ -148,9 +148,9 @@ const FALLBACK_FILES = [
   "tests/checkout.test.ts",
 ];
 
-const OFFLINE_PATCH = `diff --git a/examples/buggy-checkout.ts b/examples/buggy-checkout.ts
---- a/examples/buggy-checkout.ts
-+++ b/examples/buggy-checkout.ts
+const OFFLINE_PATCH = `diff --git a/examples/checkout-reliability/buggy-checkout.ts b/examples/checkout-reliability/buggy-checkout.ts
+--- a/examples/checkout-reliability/buggy-checkout.ts
++++ b/examples/checkout-reliability/buggy-checkout.ts
 @@ -14,17 +14,15 @@ export async function submitCheckout(
    }
  
@@ -280,6 +280,9 @@ export default function App() {
   const [verifying, setVerifying] = useState(false);
   const [verification, setVerification] = useState<VerificationResult | null>(null);
   const contextFileInput = useRef<HTMLInputElement>(null);
+  const historyRequestRef = useRef(0);
+  const commitFilesRequestRef = useRef(0);
+  const commitFilesTimerRef = useRef<number | null>(null);
 
   const selectedTask = tasks.find((task) => task.id === selectedId) ?? null;
   const isAnalyzed = selectedTask ? analyzedTaskIds.has(selectedTask.id) : false;
@@ -306,6 +309,12 @@ export default function App() {
     localStorage.setItem("patchtrail-repo", repoPath);
     void loadGitHistory(repoPath);
   }, [repoPath]);
+
+  useEffect(() => () => {
+    if (commitFilesTimerRef.current !== null) {
+      window.clearTimeout(commitFilesTimerRef.current);
+    }
+  }, []);
 
   const addActivity = (type: EventType, message: string) => {
     setActivity((events) => [createEvent(type, message), ...events].slice(0, 60));
@@ -468,37 +477,62 @@ export default function App() {
 
   async function loadGitHistory(path: string) {
     if (!isTauri()) return;
+    const requestId = ++historyRequestRef.current;
+    commitFilesRequestRef.current += 1;
+    if (commitFilesTimerRef.current !== null) {
+      window.clearTimeout(commitFilesTimerRef.current);
+      commitFilesTimerRef.current = null;
+    }
     setGitLoading(true);
     setGitError("");
     try {
       const history = await invoke<Commit[]>("git_log", { repoPath: path });
+      if (requestId !== historyRequestRef.current) return;
       setCommits(history);
       if (history[0]) {
         setSelectedCommit(history[0]);
         const files = await invoke<string[]>("git_commit_files", { repoPath: path, hash: history[0].hash });
+        if (requestId !== historyRequestRef.current) return;
         setCommitFiles(files);
       }
     } catch (error) {
+      if (requestId !== historyRequestRef.current) return;
       setGitError(String(error));
       setCommits(FALLBACK_COMMITS);
       setSelectedCommit(FALLBACK_COMMITS[0]);
       setCommitFiles(FALLBACK_FILES);
     } finally {
-      setGitLoading(false);
+      if (requestId === historyRequestRef.current) {
+        setGitLoading(false);
+      }
     }
   }
 
-  const selectCommit = async (commit: Commit) => {
+  const selectCommit = (commit: Commit) => {
     setSelectedCommit(commit);
+    const requestId = ++commitFilesRequestRef.current;
+    if (commitFilesTimerRef.current !== null) {
+      window.clearTimeout(commitFilesTimerRef.current);
+      commitFilesTimerRef.current = null;
+    }
     if (!repoPath || !isTauri()) {
       setCommitFiles(FALLBACK_FILES);
       return;
     }
-    try {
-      setCommitFiles(await invoke<string[]>("git_commit_files", { repoPath, hash: commit.hash }));
-    } catch (error) {
-      setGitError(String(error));
-    }
+    commitFilesTimerRef.current = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const files = await invoke<string[]>("git_commit_files", { repoPath, hash: commit.hash });
+          if (requestId === commitFilesRequestRef.current) {
+            setCommitFiles(files);
+          }
+        } catch (error) {
+          if (requestId === commitFilesRequestRef.current) {
+            setGitError(String(error));
+          }
+        }
+      })();
+    }, 120);
   };
 
   const cycleTheme = () => {

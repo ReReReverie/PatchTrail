@@ -34,9 +34,19 @@ fn validate_hash(hash: &str) -> Result<&str, String> {
     }
 }
 
+fn hidden_command(program: &str) -> Command {
+    let mut command = Command::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+    command
+}
+
 fn run_git(repo_path: &str, args: &[&str]) -> Result<String, String> {
     let repository = repository_path(repo_path)?;
-    let output = Command::new("git")
+    let output = hidden_command("git")
         .arg("-C")
         .arg(repository)
         .args(args)
@@ -55,8 +65,22 @@ fn run_git(repo_path: &str, args: &[&str]) -> Result<String, String> {
     String::from_utf8(output.stdout).map_err(|_| "Git returned unreadable output.".to_string())
 }
 
+async fn run_blocking<T, F>(operation: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(operation)
+        .await
+        .map_err(|_| "The Git operation was interrupted.".to_string())?
+}
+
 #[tauri::command]
-fn verify_patch(repo_path: String, patch: String) -> Result<VerificationResult, String> {
+async fn verify_patch(repo_path: String, patch: String) -> Result<VerificationResult, String> {
+    run_blocking(move || verify_patch_sync(repo_path, patch)).await
+}
+
+fn verify_patch_sync(repo_path: String, patch: String) -> Result<VerificationResult, String> {
     let repository = repository_path(&repo_path)?;
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -159,7 +183,11 @@ fn verify_patch(repo_path: String, patch: String) -> Result<VerificationResult, 
 }
 
 #[tauri::command]
-fn git_log(repo_path: String) -> Result<Vec<GitCommit>, String> {
+async fn git_log(repo_path: String) -> Result<Vec<GitCommit>, String> {
+    run_blocking(move || git_log_sync(repo_path)).await
+}
+
+fn git_log_sync(repo_path: String) -> Result<Vec<GitCommit>, String> {
     let output = run_git(
         &repo_path,
         &[
@@ -187,7 +215,11 @@ fn git_log(repo_path: String) -> Result<Vec<GitCommit>, String> {
 }
 
 #[tauri::command]
-fn git_commit_files(repo_path: String, hash: String) -> Result<Vec<String>, String> {
+async fn git_commit_files(repo_path: String, hash: String) -> Result<Vec<String>, String> {
+    run_blocking(move || git_commit_files_sync(repo_path, hash)).await
+}
+
+fn git_commit_files_sync(repo_path: String, hash: String) -> Result<Vec<String>, String> {
     let safe_hash = validate_hash(&hash)?;
     let output = run_git(
         &repo_path,
@@ -210,12 +242,16 @@ fn git_commit_files(repo_path: String, hash: String) -> Result<Vec<String>, Stri
 }
 
 #[tauri::command]
-fn git_status(repo_path: String) -> Result<String, String> {
-    run_git(&repo_path, &["status", "--short", "--branch"])
+async fn git_status(repo_path: String) -> Result<String, String> {
+    run_blocking(move || run_git(&repo_path, &["status", "--short", "--branch"])).await
 }
 
 #[tauri::command]
-fn git_diff(repo_path: String, hash: String) -> Result<String, String> {
+async fn git_diff(repo_path: String, hash: String) -> Result<String, String> {
+    run_blocking(move || git_diff_sync(repo_path, hash)).await
+}
+
+fn git_diff_sync(repo_path: String, hash: String) -> Result<String, String> {
     let safe_hash = validate_hash(&hash)?;
     let output = run_git(
         &repo_path,
@@ -484,7 +520,7 @@ pub fn run() {
 }
 
 fn run_git_at(repository: &Path, args: &[&str]) -> Result<Output, String> {
-    Command::new("git")
+    hidden_command("git")
         .arg("-C")
         .arg(repository)
         .args(args)
@@ -525,12 +561,12 @@ fn command_exists_in_package_json(repository: &Path, script: &str) -> bool {
 
 fn run_check(repository: &Path, name: &str, command: &str) -> VerificationCheck {
     #[cfg(windows)]
-    let result = Command::new("cmd")
+    let result = hidden_command("cmd")
         .args(["/C", command])
         .current_dir(repository)
         .output();
     #[cfg(not(windows))]
-    let result = Command::new("sh")
+    let result = hidden_command("sh")
         .args(["-lc", command])
         .current_dir(repository)
         .output();

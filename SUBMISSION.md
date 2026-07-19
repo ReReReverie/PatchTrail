@@ -1,4 +1,4 @@
-﻿# Hackathon submission notes
+# Hackathon submission notes
 
 ## Recommended category
 
