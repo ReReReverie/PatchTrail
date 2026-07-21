@@ -1,9 +1,8 @@
-# Cuttle
+﻿# Cuttle
 
-Cuttle is a local-first desktop engineering workspace that turns meeting notes, tickets, stack traces, and bug reports into actionable tasks. It provides reviewable patch previews, regression-test stubs, real local Git history, and copy-only recovery commands.
+Cuttle is a software based upon a cuttlefish, a creature that can adapt to its surroundings, the program imitates that trait, programmers usually encounters a lot of obstacles or enemies but Cuttle for programmers would be able to help in adapting in a difficult and sticky situation if there would be problems in their program. Cuttle helps solve bugs, meeting context/issues, and with the use of LLMs you can see the possible problems also would provide the proper solution or fix for the program to work properly. Cuttle also prevents future problems that developers may encounter with the help of Git History, where developers can recover previous history versions of their work to prevent progress loss.
 
 ## Judge quick start — no rebuild required
-
 Download the latest [Cuttle GitHub Release](https://github.com/ReReReverie/Cuttle/releases/latest) and choose the package for the judge's machine:
 
 | Judge machine | Download | Launch |
