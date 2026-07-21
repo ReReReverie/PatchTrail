@@ -88,7 +88,7 @@ fn verify_patch_sync(repo_path: String, patch: String) -> Result<VerificationRes
         .unwrap_or_default()
         .as_nanos();
     let worktree =
-        std::env::temp_dir().join(format!("patchtrail-{}-{}", std::process::id(), stamp));
+        std::env::temp_dir().join(format!("cuttle-{}-{}", std::process::id(), stamp));
     let worktree_text = worktree.to_string_lossy().to_string();
     let add_args = [
         "worktree",
@@ -110,7 +110,7 @@ fn verify_patch_sync(repo_path: String, patch: String) -> Result<VerificationRes
     let result = (|| {
         let mut applied_patch = false;
         if !patch.trim().is_empty() {
-            let patch_file = worktree.join(".patchtrail.patch");
+            let patch_file = worktree.join(".cuttle.patch");
             std::fs::write(&patch_file, patch)
                 .map_err(|_| "Could not prepare the patch in the isolated worktree.".to_string())?;
             let patch_path = patch_file.to_string_lossy().to_string();

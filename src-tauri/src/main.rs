@@ -2,5 +2,5 @@
 
 fn main() {
     let _ = fix_path_env::fix();
-    patchtrail_lib::run();
+    cuttle_lib::run();
 }

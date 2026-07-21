@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
   AlertTriangle, ArrowRight, Bug, Check, CheckCircle2, ChevronDown, ClipboardList,
   Clock3, Copy, FileCode2, FolderOpen, GitBranch, History, LoaderCircle, Monitor,
@@ -245,7 +245,7 @@ function shortPath(path: string) {
 }
 
 export default function App() {
-  const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem("patchtrail-theme") as Theme) || "system");
+  const [theme, setTheme] = useState<Theme>(() => ((localStorage.getItem("cuttle-theme") || localStorage.getItem("patchtrail-theme")) as Theme) || "system");
   const [context, setContext] = useState(SAMPLE_CONTEXT);
   const [contextFile, setContextFile] = useState("");
   const [contextOpen, setContextOpen] = useState(true);
@@ -255,7 +255,7 @@ export default function App() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzedTaskIds, setAnalyzedTaskIds] = useState<Set<string>>(new Set());
   const [reviewTab, setReviewTab] = useState<"patch" | "tests">("patch");
-  const [repoPath, setRepoPath] = useState(() => localStorage.getItem("patchtrail-repo") || "");
+  const [repoPath, setRepoPath] = useState(() => (localStorage.getItem("cuttle-repo") || localStorage.getItem("patchtrail-repo")) || "");
   const [commits, setCommits] = useState<Commit[]>(FALLBACK_COMMITS);
   const [selectedCommit, setSelectedCommit] = useState<Commit>(FALLBACK_COMMITS[0]);
   const [commitFiles, setCommitFiles] = useState<string[]>(FALLBACK_FILES);
@@ -300,13 +300,13 @@ export default function App() {
     };
     apply();
     media.addEventListener("change", apply);
-    localStorage.setItem("patchtrail-theme", theme);
+    localStorage.setItem("cuttle-theme", theme);
     return () => media.removeEventListener("change", apply);
   }, [theme]);
 
   useEffect(() => {
     if (!repoPath) return;
-    localStorage.setItem("patchtrail-repo", repoPath);
+    localStorage.setItem("cuttle-repo", repoPath);
     void loadGitHistory(repoPath);
   }, [repoPath]);
 

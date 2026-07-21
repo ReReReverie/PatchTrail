@@ -126,7 +126,7 @@ jobs:
         if: matrix.is_windows
         shell: pwsh
         run: |
-          $exe = (Resolve-Path 'src-tauri/target/release/patchtrail.exe').Path
+          $exe = (Resolve-Path 'src-tauri/target/release/cuttle.exe').Path
           $proc = Start-Process -FilePath $exe -PassThru -WindowStyle Hidden
           Start-Sleep -Seconds 5
           if ($proc.HasExited) { throw "Cuttle exited during startup with code $($proc.ExitCode)" }
@@ -149,7 +149,7 @@ jobs:
           app="$(find "$mount_point" -maxdepth 1 -name '*.app' -print -quit)"
           test -n "$app"
           codesign --verify --deep --strict "$app"
-          lipo -info "$app/Contents/MacOS/patchtrail"
+          lipo -info "$app/Contents/MacOS/cuttle"
 
       - name: Validate Linux AppImage
         if: matrix.bundle_kind == 'appimage'
@@ -181,7 +181,7 @@ jobs:
           $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
           $stage = Join-Path $env:RUNNER_TEMP 'Cuttle-portable'
           New-Item -ItemType Directory -Path $stage -Force | Out-Null
-          Copy-Item src-tauri/target/release/patchtrail.exe (Join-Path $stage 'Cuttle.exe')
+          Copy-Item src-tauri/target/release/cuttle.exe (Join-Path $stage 'Cuttle.exe')
           Copy-Item examples (Join-Path $stage 'examples') -Recurse
           Copy-Item release/JUDGE_TESTING.md (Join-Path $stage 'JUDGE_TESTING.md')
           $zip = Join-Path $env:RUNNER_TEMP "Cuttle-v$version-windows-x64-portable.zip"
