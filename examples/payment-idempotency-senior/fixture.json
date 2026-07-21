@@ -1,0 +1,12 @@
+{
+  "id": "payment-idempotency-senior",
+  "title": "Account-scoped payment idempotency",
+  "difficulty": "senior",
+  "buggyEntrypoint": "payment-idempotency-senior.ts",
+  "fixedEntrypoint": "fixed/payment-idempotency-senior.ts",
+  "transcript": "payment-idempotency-senior.txt",
+  "bugCategories": ["tenant-isolation", "idempotency", "concurrency"],
+  "affectedFiles": ["payment-idempotency-senior.ts", "src/payment-ledger.ts", "src/payment-worker.ts"],
+  "invariants": ["keys are account-scoped", "same-account retries reuse results", "failed attempts can retry", "concurrent duplicates charge once"],
+  "regressionCases": ["cross-account key reuse", "same-account retry", "failed retry", "concurrent duplicate", "pending result"]
+}

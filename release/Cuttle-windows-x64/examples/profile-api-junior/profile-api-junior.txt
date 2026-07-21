@@ -1,8 +1,13 @@
-Profile API practice - junior
+Profile API incident — deleted-account handling
 
-@Noah: The profile screen crashes when an account has been deleted. The loader in examples/profile-api-junior/profile-api-junior.ts parses the 404 body as a successful profile. Handle the response status before parsing JSON and return null for a missing profile.
+Incident context: The profile screen calls a JSON HTTP endpoint and caches successful profiles for the session. Deleted accounts are expected during normal account cleanup. The fixture uses deterministic Response objects and an in-memory cache.
 
-QA: Add a regression test in examples/profile-api-junior/profile-api-junior.test.ts for a 404 response, and keep parsing valid JSON for a 200 response.
+@Noah [high]: examples/profile-api-junior/profile-api-junior.ts treats a 404 payload as a valid profile. Return null for a deleted profile so the UI can show the signed-out state.
 
-Please review the error path and the patch before applying it.
+@Mika [high]: A 500 response must remain an error and must not populate examples/profile-api-junior/src/profile-cache.ts. Do not convert server outages into empty profiles.
 
+@Lea [medium]: A 200 response missing id or displayName is malformed. Review examples/profile-api-junior/src/profile-client.ts and reject it with a useful error instead of caching partial data.
+
+QA: Cover valid 200 JSON, 404 deletion, 500 failure, malformed success payloads, cache hits, and explicit invalidation. Keep response parsing deterministic and avoid logging profile contents.
+
+Release requirement: Preserve the existing request URL shape and keep the change local to the profile fixture.

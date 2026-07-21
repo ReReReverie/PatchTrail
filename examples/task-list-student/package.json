@@ -1,0 +1,11 @@
+{
+    "name":  "@cuttle/fixture-task-list",
+    "private":  true,
+    "type":  "module",
+    "scripts":  {
+                    "typecheck":  "tsc --noEmit -p tsconfig.json",
+                    "test:baseline":  "vitest run --config ../vitest.config.ts tests/reproduction.test.ts",
+                    "test:solution":  "vitest run --config ../vitest.config.ts tests/solution.test.ts",
+                    "regression":  "vitest run --config ../vitest.config.ts tests/regression.test.ts"
+                }
+}

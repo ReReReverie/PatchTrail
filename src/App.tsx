@@ -45,6 +45,13 @@ interface AiInsight {
   provider: string;
 }
 
+interface OfflineReview {
+  insight: AiInsight;
+  diff: { kind: "context" | "removed" | "added"; line: number; code: string }[];
+  tests: { label: string; code: string }[];
+  patch: string;
+}
+
 interface VerificationResult {
   passed: boolean;
   appliedPatch: boolean;
@@ -153,19 +160,19 @@ const OFFLINE_PATCH = `diff --git a/examples/checkout-reliability/buggy-checkout
 +++ b/examples/checkout-reliability/buggy-checkout.ts
 @@ -14,17 +14,15 @@ export async function submitCheckout(
    }
- 
+
 -  // BUG 1: a successful 204 response has no body, so response.json() throws.
 -  return response.json() as Promise<CheckoutResponse>;
 +  if (response.status === 204) return null;
 +  return response.json() as Promise<CheckoutResponse>;
  }
- 
+
  export function applyCoupon(total: number, discount: number | undefined): number {
 -  // BUG 2: an absent discount creates NaN and poisons the order total.
 -  return total - (discount as number);
 +  return total - (discount ?? 0);
  }
- 
+
  export function shouldShowRetryBanner(
    paymentStatus: "idle" | "processing" | "success" | "failed",
  ): boolean {
@@ -175,6 +182,174 @@ const OFFLINE_PATCH = `diff --git a/examples/checkout-reliability/buggy-checkout
  }
 `;
 
+const OFFLINE_CHECKOUT_REVIEW: OfflineReview = {
+  insight: {
+    provider: "Offline demo",
+    model: "scenario-aware",
+    text: "Checkout has three independent contract violations: empty successful responses are parsed as JSON, missing coupon discounts poison the total, and the retry banner treats success as retryable. The regression suite should cover 204, malformed 4xx, retry-after-failure, duplicate submits, and successful payment state.",
+  },
+  diff: [
+    { kind: "context", line: 18, code: "const response = await request(input);" },
+    { kind: "removed", line: 19, code: "- return response.json();" },
+    { kind: "added", line: 19, code: "+ if (response.status === 204) return null;" },
+    { kind: "added", line: 20, code: "+ return await response.json();" },
+    { kind: "context", line: 21, code: "}" },
+  ],
+  tests: [
+    { label: "handles a 204 success without parsing a body", code: "it('handles a 204 success without parsing a body', async () => {\n  await expect(submitCheckout(input, response204)).resolves.toBeNull();\n});" },
+    { label: "deduplicates concurrent submits and retries failures", code: "it('deduplicates concurrent submits and retries failures', async () => {\n  await Promise.all([submitOrder(cartId), submitOrder(cartId)]);\n  expect(gateway.charge).toHaveBeenCalledTimes(1);\n});" },
+  ],
+  patch: OFFLINE_PATCH,
+};
+
+const OFFLINE_TASK_REVIEW: OfflineReview = {
+  insight: {
+    provider: "Offline demo",
+    model: "scenario-aware",
+    text: "The task action assumes a stale browser tab still points at a live record and mutates the original array in place. The safe behavior is to ignore a missing id, return a new list for known ids, and make sync-event application idempotent by sequence number before ordering events.",
+  },
+  diff: [
+    { kind: "context", line: 8, code: "const todo = todos.find((item) => item.id === id);" },
+    { kind: "removed", line: 10, code: "- todo!.completed = !todo!.completed;" },
+    { kind: "removed", line: 11, code: "- return todos;" },
+    { kind: "added", line: 10, code: "+ if (!todo) return todos;" },
+    { kind: "added", line: 11, code: "+ return todos.map((item) => item.id === id ? { ...item, completed: !item.completed } : item);" },
+  ],
+  tests: [
+    { label: "ignores a stale toggle for a deleted task", code: "it('ignores a stale toggle for a deleted task', () => {\n  expect(toggleTodo(todos, 'missing-id')).toEqual(todos);\n});" },
+    { label: "deduplicates events while preserving sequence order", code: "it('deduplicates events while preserving sequence order', () => {\n  expect(applyEvent([first], first)).toEqual([first]);\n  expect(applyEvent([first], earlier)).toEqual([earlier, first]);\n});" },
+  ],
+  patch: `diff --git a/examples/task-list-student/task-list-student.ts b/examples/task-list-student/task-list-student.ts
+--- a/examples/task-list-student/task-list-student.ts
++++ b/examples/task-list-student/task-list-student.ts
+@@ -8,7 +8,8 @@ export function toggleTodo(todos: Todo[], id: string): Todo[] {
+   const todo = todos.find((item) => item.id === id);
+
+-  todo!.completed = !todo!.completed;
+-  return todos;
++  if (!todo) return todos;
++  return todos.map((item) => item.id === id ? { ...item, completed: !item.completed } : item);
+ }
+`,
+};
+
+const OFFLINE_PROFILE_REVIEW: OfflineReview = {
+  insight: {
+    provider: "Offline demo",
+    model: "scenario-aware",
+    text: "The profile client accepts every JSON body as a profile, including deleted-user and server-error payloads. Branch on HTTP status before parsing, validate the successful response shape, and only cache validated profiles; 404 should become null while 500 remains an error.",
+  },
+  diff: [
+    { kind: "context", line: 9, code: "const response = await request(`/api/profiles/${id}`);" },
+    { kind: "added", line: 10, code: "+ if (response.status === 404) return null;" },
+    { kind: "added", line: 11, code: "+ if (!response.ok) throw new Error(`Profile request failed: ${response.status}`);" },
+    { kind: "removed", line: 13, code: "- return response.json() as Promise<Profile>;" },
+    { kind: "added", line: 13, code: "+ const value: unknown = await response.json();" },
+    { kind: "added", line: 14, code: "+ return validateProfile(value);" },
+  ],
+  tests: [
+    { label: "maps 404 to a deleted profile", code: "it('maps 404 to a deleted profile', async () => {\n  await expect(loadProfile('deleted-user', response404)).resolves.toBeNull();\n});" },
+    { label: "rejects 500 and malformed 200 payloads", code: "it('rejects 500 and malformed 200 payloads', async () => {\n  await expect(loadProfile('user-1', response500)).rejects.toThrow('500');\n  await expect(loadProfile('user-1', malformedResponse)).rejects.toThrow('malformed');\n});" },
+  ],
+  patch: `diff --git a/examples/profile-api-junior/profile-api-junior.ts b/examples/profile-api-junior/profile-api-junior.ts
+--- a/examples/profile-api-junior/profile-api-junior.ts
++++ b/examples/profile-api-junior/profile-api-junior.ts
+@@ -8,8 +8,12 @@ export async function loadProfile(
+ ): Promise<Profile | null> {
+   const response = await request(\`/api/profiles/\${id}\`);
+
+-  return response.json() as Promise<Profile>;
++  if (response.status === 404) return null;
++  if (!response.ok) throw new Error(\`Profile request failed: \${response.status}\`);
++  const value: unknown = await response.json();
++  if (!value || typeof value !== "object") throw new Error("Profile response was malformed");
++  return value as Profile;
+ }
+`,
+};
+
+const OFFLINE_CART_REVIEW: OfflineReview = {
+  insight: {
+    provider: "Offline demo",
+    model: "scenario-aware",
+    text: "The cart cache uses only the user id, so a regional storefront can receive another region's cart. The cache boundary must include tenant and region, share pending loads for the same key, expire through an injected clock, and remove failed or explicitly invalidated entries.",
+  },
+  diff: [
+    { kind: "removed", line: 15, code: "- const cached = cartCache.get(userId);" },
+    { kind: "added", line: 15, code: "+ const key = userId + \":\" + region;" },
+    { kind: "added", line: 16, code: "+ const cached = cartCache.get(key);" },
+    { kind: "context", line: 17, code: "if (cached) return cached;" },
+    { kind: "removed", line: 21, code: "- cartCache.set(userId, cart);" },
+    { kind: "added", line: 21, code: "+ cartCache.set(key, cart);" },
+  ],
+  tests: [
+    { label: "keeps US and EU carts isolated", code: "it('keeps US and EU carts isolated', async () => {\n  expect((await getCart(userId, 'us', load)).region).toBe('us');\n  expect((await getCart(userId, 'eu', load)).region).toBe('eu');\n});" },
+    { label: "deduplicates loads and retries after failure", code: "it('deduplicates loads and retries after failure', async () => {\n  await Promise.all([getCart(userId, 'us', load), getCart(userId, 'us', load)]);\n  await expect(getCart(userId, 'us', failedLoad)).rejects.toThrow();\n});" },
+  ],
+  patch: `diff --git a/examples/cart-cache-mid/cart-cache-mid.ts b/examples/cart-cache-mid/cart-cache-mid.ts
+--- a/examples/cart-cache-mid/cart-cache-mid.ts
++++ b/examples/cart-cache-mid/cart-cache-mid.ts
+@@ -14,11 +14,12 @@ export async function getCart(
+   options: CacheOptions = defaultOptions,
+ ): Promise<Cart> {
+-  const cached = cartCache.get(userId);
++  const key = userId + ":" + region;
++  const cached = cartCache.get(key);
+   if (cached && cached.expiresAt > options.clock()) return cached.cart;
+
+   const cart = await load(userId, region);
+-  cartCache.set(userId, { cart, expiresAt: options.clock() + options.ttlMs });
++  cartCache.set(key, { cart, expiresAt: options.clock() + options.ttlMs });
+   return cart;
+ }
+`,
+};
+
+const OFFLINE_PAYMENT_REVIEW: OfflineReview = {
+  insight: {
+    provider: "Offline demo",
+    model: "scenario-aware",
+    text: "Payment idempotency is keyed by request key alone, allowing one account to receive another account's result. Scope completed and pending entries by account, share same-account in-flight work, and clear pending state on failure so a timeout can retry safely.",
+  },
+  diff: [
+    { kind: "removed", line: 12, code: "- const cached = completedPayments.get(idempotencyKey);" },
+    { kind: "added", line: 12, code: "+ const key = accountId + \":\" + idempotencyKey;" },
+    { kind: "added", line: 13, code: "+ const cached = completedPayments.get(key);" },
+    { kind: "context", line: 14, code: "if (cached) return cached;" },
+    { kind: "removed", line: 18, code: "- completedPayments.set(idempotencyKey, result);" },
+    { kind: "added", line: 18, code: "+ completedPayments.set(key, result);" },
+  ],
+  tests: [
+    { label: "does not share an idempotency key across accounts", code: "it('does not share a key across accounts', async () => {\n  await chargeOnce('account-1', key, chargeOne);\n  await expect(chargeOnce('account-2', key, chargeTwo)).resolves.toMatchObject({ accountId: 'account-2' });\n});" },
+    { label: "shares pending work and retries failures", code: "it('shares pending work and retries failures', async () => {\n  await Promise.all([chargeOnce(accountId, key, charge), chargeOnce(accountId, key, charge)]);\n  await expect(chargeOnce(accountId, retryKey, failedThenSuccessful)).resolves.toBeDefined();\n});" },
+  ],
+  patch: `diff --git a/examples/payment-idempotency-senior/payment-idempotency-senior.ts b/examples/payment-idempotency-senior/payment-idempotency-senior.ts
+--- a/examples/payment-idempotency-senior/payment-idempotency-senior.ts
++++ b/examples/payment-idempotency-senior/payment-idempotency-senior.ts
+@@ -10,12 +10,13 @@ export async function chargeOnce(
+   charge: () => Promise<PaymentResult>,
+ ): Promise<PaymentResult> {
+-  const cached = completedPayments.get(idempotencyKey);
++  const key = accountId + ":" + idempotencyKey;
++  const cached = completedPayments.get(key);
+   if (cached) return cached;
+
+   const result = await charge();
+-  completedPayments.set(idempotencyKey, result);
++  completedPayments.set(key, result);
+   return result;
+ }
+`,
+};
+
+function offlineReviewForTask(task: Task): OfflineReview {
+  const path = task.file.toLowerCase();
+  if (path.includes("task-list-student")) return OFFLINE_TASK_REVIEW;
+  if (path.includes("profile-api-junior")) return OFFLINE_PROFILE_REVIEW;
+  if (path.includes("cart-cache-mid")) return OFFLINE_CART_REVIEW;
+  if (path.includes("payment-idempotency-senior")) return OFFLINE_PAYMENT_REVIEW;
+  return OFFLINE_CHECKOUT_REVIEW;
+}
 const priorityRank: Record<Priority, number> = { critical: 4, high: 3, medium: 2, low: 1 };
 const isTauri = () => "__TAURI_INTERNALS__" in window;
 
@@ -200,20 +375,81 @@ function makeTitle(text: string): string {
     .slice(0, 78);
 }
 
+type FixtureHint = {
+  defaultFile: string;
+  testFile: string;
+  patterns: { expression: RegExp; file: string }[];
+};
+
+const FIXTURE_HINTS: Record<string, FixtureHint> = {
+  "checkout-reliability": {
+    defaultFile: "examples/checkout-reliability/buggy-checkout.ts",
+    testFile: "examples/checkout-reliability/tests/regression.test.ts",
+    patterns: [
+      { expression: /gateway|payment|retry|submit|duplicate|concurrent/i, file: "examples/checkout-reliability/src/checkout-flow.ts" },
+      { expression: /coupon|http|204|response|4xx/i, file: "examples/checkout-reliability/buggy-checkout.ts" },
+    ],
+  },
+  "task-list-student": {
+    defaultFile: "examples/task-list-student/task-list-student.ts",
+    testFile: "examples/task-list-student/tests/regression.test.ts",
+    patterns: [
+      { expression: /sync|sequence|event|replay|ordering/i, file: "examples/task-list-student/src/sync-events.ts" },
+      { expression: /store|record|delete|missing|stale/i, file: "examples/task-list-student/src/task-store.ts" },
+    ],
+  },
+  "profile-api-junior": {
+    defaultFile: "examples/profile-api-junior/profile-api-junior.ts",
+    testFile: "examples/profile-api-junior/tests/regression.test.ts",
+    patterns: [
+      { expression: /cache|invalidate|session/i, file: "examples/profile-api-junior/src/profile-cache.ts" },
+      { expression: /http|response|status|malformed|404|500|api/i, file: "examples/profile-api-junior/src/profile-client.ts" },
+    ],
+  },
+  "cart-cache-mid": {
+    defaultFile: "examples/cart-cache-mid/cart-cache-mid.ts",
+    testFile: "examples/cart-cache-mid/tests/regression.test.ts",
+    patterns: [
+      { expression: /cache|ttl|invalidate|concurrent|loader|region|storefront/i, file: "examples/cart-cache-mid/src/cart-cache.ts" },
+    ],
+  },
+  "payment-idempotency-senior": {
+    defaultFile: "examples/payment-idempotency-senior/payment-idempotency-senior.ts",
+    testFile: "examples/payment-idempotency-senior/tests/regression.test.ts",
+    patterns: [
+      { expression: /pending|concurrent|retry|failure|worker|gateway/i, file: "examples/payment-idempotency-senior/src/payment-worker.ts" },
+      { expression: /account|key|idempotency|ledger|tenant/i, file: "examples/payment-idempotency-senior/src/payment-ledger.ts" },
+    ],
+  },
+};
+
 function parseContext(context: string): Task[] {
   const lines = context
     .split(/\n|(?<=[.!?])\s+(?=[A-Z@])/)
     .map((line) => line.trim())
     .filter((line) => line.length > 18);
   const actionable = lines.filter((line) =>
-    /fix|bug|broken|issue|error|crash|fail|investigate|add|update|should|needs?|regression/i.test(line),
+    /fix|bug|broken|issue|error|crash|fail|investigate|add|update|should|needs?|regression|cover|review/i.test(line),
   );
   const source = actionable.length ? actionable : lines;
+  const fixture = context.match(/examples\/([a-z0-9-]+)\//i)?.[1]?.toLowerCase();
+  const scopePrefix = fixture ? `examples/${fixture}/` : undefined;
+  const hint = fixture ? FIXTURE_HINTS[fixture] : undefined;
+  const scopedSource = scopePrefix
+    ? source.filter((line) => {
+        const paths = [...line.matchAll(/examples\/[a-z0-9-]+\//gi)].map(([path]) => path.toLowerCase());
+        return paths.length === 0 || paths.every((path) => path === scopePrefix);
+      })
+    : source;
 
-  return source.slice(0, 8).map((line, index) => {
+  return scopedSource.map((line, index) => {
     const assignee = line.match(/@([\w-]+)/)?.[1] ?? "Unassigned";
-    const file =
-      line.match(/(?:src|app|tests?|packages?)\/[\w./-]+\.[a-z0-9]+/i)?.[0] ??
+    const explicitFile = line.match(/(?:src|app|tests?|packages?|examples)\/[\w./-]+\.[a-z0-9]+/i)?.[0];
+    const isTestTask = /\b(qa|test|tests|regression|cover|coverage)\b/i.test(line);
+    const inferredFile = isTestTask
+      ? hint?.testFile
+      : hint?.patterns.find(({ expression }) => expression.test(line))?.file ?? hint?.defaultFile;
+    const file = explicitFile ?? inferredFile ??
       (line.toLowerCase().includes("test") ? "tests/regression.test.ts" : "src/unknown.ts");
     return {
       id: crypto.randomUUID(),
@@ -226,7 +462,6 @@ function parseContext(context: string): Task[] {
     };
   });
 }
-
 function formatTime(value: string) {
   return new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
 }
@@ -285,6 +520,7 @@ export default function App() {
   const commitFilesTimerRef = useRef<number | null>(null);
 
   const selectedTask = tasks.find((task) => task.id === selectedId) ?? null;
+  const selectedOfflineReview = selectedTask ? offlineReviewForTask(selectedTask) : null;
   const isAnalyzed = selectedTask ? analyzedTaskIds.has(selectedTask.id) : false;
   const taskCounts = useMemo(() => ({
     open: tasks.filter((task) => task.status !== "done").length,
@@ -411,6 +647,7 @@ export default function App() {
       return;
     }
 
+    setAiInsight(offlineReviewForTask(task).insight);
     setAnalyzedTaskIds((current) => new Set(current).add(task.id));
     setAnalyzing(false);
     addActivity("ai", "Analyzed " + task.file + " offline");
@@ -438,7 +675,7 @@ export default function App() {
     try {
       const result = await invoke<VerificationResult>("verify_patch", {
         repoPath,
-        patch: provider === "offline" ? OFFLINE_PATCH : "",
+        patch: provider === "offline" ? offlineReviewForTask(selectedTask).patch : "",
       });
       setVerification(result);
       addActivity(result.passed ? "success" : "warn", result.summary);
@@ -831,11 +1068,11 @@ export default function App() {
                       <div className="diff-card">
                         <div className="code-toolbar"><span>{selectedTask.file}</span><span>Suggested change</span></div>
                         <div className="diff-lines" aria-label="Suggested code diff">
-                          <div className="context-line"><span>18</span><code>const response = await request(input);</code></div>
-                          <div className="removed-line"><span>19</span><code>- return response.json();</code></div>
-                          <div className="added-line"><span>19</span><code>+ if (response.status === 204) return null;</code></div>
-                          <div className="added-line"><span>20</span><code>+ return await response.json();</code></div>
-                          <div className="context-line"><span>21</span><code>{"}"}</code></div>
+                          {selectedOfflineReview?.diff.map((line, index) => (
+                            <div className={line.kind + "-line"} key={line.kind + "-" + line.line + "-" + index}>
+                              <span>{line.line}</span><code>{line.code}</code>
+                            </div>
+                          ))}
                         </div>
                         <div className="patch-actions">
                           <span><ShieldCheck size={14} /> Review required · no files changed yet</span>

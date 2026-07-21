@@ -1,8 +1,13 @@
-Todo list bug report - student
+Collaborative task list incident — sync client
 
-@Mia (student): Why does the whole todo list crash just because I clicked Complete on an item that had already been removed? I was only trying to finish my homework, and now the page throws an error instead of doing nothing. Please fix examples/task-list-student/task-list-student.ts so a missing todo id is ignored and the rest of my list stays there.
+Incident context: The task list receives local button actions and replayed sync events. A stale browser tab can send an action for a task that another device already deleted. Events may arrive out of order, and a reconnect can replay the same sequence number.
 
-QA: Add a regression test in examples/task-list-student/task-list-student.test.ts for a missing id and keep the existing toggle behavior for a known id.
+@Mia [medium]: Clicking Complete for a task removed by another device crashes the list in examples/task-list-student/task-list-student.ts. Ignore a missing id without mutating the remaining tasks.
 
-Please review the patch before applying it.
+@Noah [medium]: Replayed completion events are duplicated by examples/task-list-student/src/task-store.ts. Preserve sequence ordering, but make applying the same sequence twice idempotent.
 
+@Ravi [high]: A delete event with a lower sequence number can arrive after a completion event. Review examples/task-list-student/src/sync-events.ts and keep the final state deterministic without relying on arrival order.
+
+QA: Cover a known toggle, a missing id, duplicate events, delete-before-toggle, and out-of-order replay. Use in-memory arrays only; no browser storage or network.
+
+Product constraint: Keep the interaction forgiving for stale clients. Do not throw from a user action merely because the record is gone.

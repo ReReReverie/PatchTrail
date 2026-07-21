@@ -1,0 +1,12 @@
+{
+  "id": "profile-api-junior",
+  "title": "Deleted profile API response",
+  "difficulty": "junior",
+  "buggyEntrypoint": "profile-api-junior.ts",
+  "fixedEntrypoint": "fixed/profile-api-junior.ts",
+  "transcript": "profile-api-junior.txt",
+  "bugCategories": ["http-status", "schema-validation", "cache-invalidation"],
+  "affectedFiles": ["profile-api-junior.ts", "src/profile-client.ts", "src/profile-cache.ts"],
+  "invariants": ["404 returns null", "500 remains an error", "invalid success payloads are rejected"],
+  "regressionCases": ["200 profile", "404 deleted profile", "500 server error", "malformed 200", "cache refresh"]
+}

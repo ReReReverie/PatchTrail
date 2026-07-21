@@ -1,11 +1,13 @@
-﻿Checkout reliability triage — Cuttle demo
+Checkout reliability incident — release candidate 2026.07
 
-@Mika: Checkout succeeds with HTTP 204 after a coupon is accepted, but examples/checkout-reliability/buggy-checkout.ts calls response.json() and throws because the response has no body. Fix the empty-response handling. This is release-blocking.
+Incident context: The checkout service is being migrated behind a new payment gateway adapter. The web client, coupon calculation, and retry banner all share one submit flow. No external service is used in this fixture; the gateway and HTTP responses are deterministic fakes.
 
-@Noah: Orders without a discount show NaN in the total. Investigate applyCoupon in examples/checkout-reliability/buggy-checkout.ts and make the no-discount path preserve the original total.
+@Mika [critical]: The coupon endpoint returns HTTP 204 after accepting a coupon. examples/checkout-reliability/buggy-checkout.ts calls response.json() on the successful empty response and the checkout screen reports a failure after the order was accepted. Preserve normal JSON success responses and convert non-2xx responses into a useful checkout error.
 
-QA: After payment succeeds, the retry banner stays visible. Fix shouldShowRetryBanner in examples/checkout-reliability/buggy-checkout.ts and add a regression test for the success state.
+@Noah [high]: Orders without a discount become NaN in examples/checkout-reliability/buggy-checkout.ts. Keep the total numeric when the coupon service returns no discount, including the no-coupon path in examples/checkout-reliability/src/checkout-flow.ts.
 
-@Mika: Add or update tests in examples/checkout-reliability/buggy-checkout.test.ts for the 204 response, an absent discount, and a successful payment. Please review the patch before applying it.
+@Lea [high]: Two fast clicks can submit the same cart twice through examples/checkout-reliability/src/checkout-flow.ts. The payment gateway must receive one charge for the cart while the callers share the same result. A failed gateway attempt must be retryable.
 
+QA: Add coverage for the 204 response, a JSON 200 response, malformed error payloads, absent discounts, duplicate submits, and retry-after-failure. Tests belong under examples/checkout-reliability/tests/ and must use deterministic fake adapters.
 
+Security review: Do not log payment credentials or silently turn gateway failures into successful orders. Keep the patch limited to the checkout fixture and preserve the review-before-apply workflow.

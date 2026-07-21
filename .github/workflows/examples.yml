@@ -1,0 +1,40 @@
+name: Validate Cuttle fixtures
+
+on:
+  push:
+    paths:
+      - 'examples/**'
+      - 'src/App.tsx'
+      - '.github/workflows/examples.yml'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+  pull_request:
+    paths:
+      - 'examples/**'
+      - 'src/App.tsx'
+      - '.github/workflows/examples.yml'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            examples/package-lock.json
+      - name: Install production workspace
+        run: npm ci
+      - name: Verify production build boundary
+        run: npm run build
+      - name: Install isolated fixture workspace
+        run: npm ci --prefix examples
+      - name: Validate fixtures
+        run: npm run validate --prefix examples

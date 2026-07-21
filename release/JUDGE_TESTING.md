@@ -12,6 +12,9 @@ Use the latest GitHub Release (https://github.com/ReReReverie/Cuttle/releases/la
 
 The release also includes SHA256SUMS.txt.
 
+## Example data
+
+The portable package includes five isolated engineering fixtures under `examples/`. They are optional test data for importing transcripts, inspecting source, and debugging reviewed fixes in Cuttle. Cuttle's offline workflow does not require Node.js, Rust, fixture dependencies, network access, or API keys. To execute the fixture typechecks and tests, install their dependencies after extraction with `npm ci --prefix examples`; this is separate from running Cuttle and is documented in `examples/README.md`.
 ## Launch notes
 
 - Windows: extract the portable ZIP and run Cuttle.exe. If SmartScreen appears, choose More info, then Run anyway.

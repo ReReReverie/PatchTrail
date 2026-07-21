@@ -1,0 +1,12 @@
+{
+  "id": "task-list-student",
+  "title": "Collaborative task list stale action",
+  "difficulty": "student",
+  "buggyEntrypoint": "task-list-student.ts",
+  "fixedEntrypoint": "fixed/task-list-student.ts",
+  "transcript": "task-list-student.txt",
+  "bugCategories": ["stale-state", "immutability", "event-ordering"],
+  "affectedFiles": ["task-list-student.ts", "src/task-store.ts", "src/sync-events.ts"],
+  "invariants": ["missing tasks are ignored", "known tasks toggle immutably", "duplicate events are harmless"],
+  "regressionCases": ["missing id", "known id", "duplicate completion", "delete before toggle", "out-of-order sync"]
+}

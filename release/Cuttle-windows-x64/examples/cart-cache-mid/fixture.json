@@ -1,0 +1,32 @@
+{
+    "id":  "cart-cache-mid",
+    "title":  "Regional cart cache isolation",
+    "difficulty":  "mid",
+    "buggyEntrypoint":  "cart-cache-mid.ts",
+    "fixedEntrypoint":  "fixed/cart-cache-mid.ts",
+    "transcript":  "cart-cache-mid.txt",
+    "bugCategories":  [
+                          "cache-key",
+                          "concurrency",
+                          "invalidation"
+                      ],
+    "affectedFiles":  [
+                          "cart-cache-mid.ts",
+                          "src/cart-cache.ts",
+                          "src/storefront.ts"
+                      ],
+    "invariants":  [
+                       "tenant and region stay isolated",
+                       "same-key concurrent loads deduplicate",
+                       "failed loads are not cached",
+                       "entries expire using injected TTL clock"
+                   ],
+    "regressionCases":  [
+                            "US/EU isolation",
+                            "same-key cache hit",
+                            "concurrent requests",
+                            "TTL expiry",
+                            "regional invalidation",
+                            "loader failure"
+                        ]
+}

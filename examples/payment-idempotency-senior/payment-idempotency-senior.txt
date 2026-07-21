@@ -1,8 +1,13 @@
-Payment idempotency practice - senior
+Payment idempotency incident — tenant isolation and retries
 
-@Lea: A reused idempotency key from one account can return the previous account's payment result. The helper in examples/payment-idempotency-senior/payment-idempotency-senior.ts keys completed payments by request key alone. Scope the stored result to the account and add a regression test for two accounts using the same key.
+Incident context: The payment worker receives account id and idempotency key from a checkout request. Retries are expected after timeouts, and two workers can receive the same request concurrently. The gateway is a deterministic fake.
 
-Security review: Keep retries for the same account and key idempotent, but never share a payment result across accounts. Add coverage in examples/payment-idempotency-senior/payment-idempotency-senior.test.ts.
+@Lea [critical]: examples/payment-idempotency-senior/payment-idempotency-senior.ts keys completed payments by request key alone. The same key from another account can receive the first account's payment result. Scope idempotency to the account boundary.
 
-Please review the data-isolation boundary carefully before applying the patch.
+@Mika [high]: Concurrent calls for one account and key must share one pending charge. Review examples/payment-idempotency-senior/src/payment-worker.ts and prevent double charging without holding a failed request forever.
 
+@Noah [high]: A gateway timeout must be retryable. Only a successful payment may be cached as completed; failed attempts must not leak a result to later requests.
+
+QA: Cover cross-account key reuse, same-account retry, concurrent duplicate calls, failed-then-successful retry, and pending result sharing. Use deterministic payment ids and assert the gateway call count.
+
+Security review: Never cross tenant boundaries, never log payment details, and preserve the existing PaymentResult shape.

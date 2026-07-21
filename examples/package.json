@@ -1,0 +1,16 @@
+{
+  "name": "@cuttle/examples",
+  "private": true,
+  "type": "module",
+  "workspaces": ["*"],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces",
+    "test:baseline": "npm run test:baseline --workspaces",
+    "test:solution": "npm run test:solution --workspaces",
+    "validate": "npm run typecheck && npm run test:baseline && npm run test:solution"
+  },
+  "devDependencies": {
+    "typescript": "~5.7.2",
+    "vitest": "^3.2.4"
+  }
+}

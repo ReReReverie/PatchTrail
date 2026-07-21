@@ -1,8 +1,13 @@
-Regional cart cache practice - mid
+Regional cart cache incident â€” storefront isolation
 
-@Sam: Customers switching between the US and EU storefronts sometimes see the wrong cart. The cache in examples/cart-cache-mid/cart-cache-mid.ts uses only the user id, so the region is ignored. Include the storefront region in the cache key and add a regression test.
+Incident context: One account can shop through US and EU storefronts in the same browser. Cart reads are asynchronous and the storefront loader may be slow. A reconnect can create concurrent reads for the same account and region.
 
-QA: Add tests in examples/cart-cache-mid/cart-cache-mid.test.ts proving that the same user can have independent US and EU carts, while repeated reads for one region still use the cache.
+@Sam [high]: examples/cart-cache-mid/cart-cache-mid.ts keys the cache by user id alone, so an EU visit can receive the US cart. Include storefront region in the cache boundary and keep both carts independent.
 
-Please review the cache boundary and the patch before applying it.
+@Ravi [medium]: Entries need a deterministic TTL clock as well as explicit invalidation. Two simultaneous reads for the same user and region should share one loader promise rather than issuing duplicate loads. Review examples/cart-cache-mid/src/cart-cache.ts and keep failed loads out of the cache.
 
+@Lea [medium]: A cart invalidation must not affect another region. Preserve repeated reads as cache hits until the entry is explicitly cleared or expires.
+
+QA: Cover US/EU isolation, same-region cache hits, concurrent loads, loader failure followed by retry, and explicit invalidation. Use deterministic in-memory loaders and no wall-clock dependency.
+
+Security review: Treat region as part of the tenant boundary; never return another storefront's items.

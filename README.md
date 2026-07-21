@@ -118,6 +118,18 @@ Select an extracted task and click **Analyze bug** after configuration. Judges c
 
 The release workflow runs on native GitHub-hosted runners, so a local Mac or Linux machine is not required to produce these artifacts. The project does not claim manual hardware testing for macOS or Linux.
 
+## Example fixture suite
+
+The repository includes five isolated, runnable TypeScript/Vitest fixtures under [`examples/`](examples/). They model small production slices for checkout reliability, task synchronization, profile APIs, regional cart caching, and payment idempotency.
+
+Fixture dependencies are scoped to `examples/` and are never imported by the Cuttle application or root production build. Cuttle can consume their transcripts and debug the learner source through the context panel without installing those dependencies. Running the fixture typechecks and Vitest suites is a separate execution step and requires installing the `examples/` dependencies first:
+
+```powershell
+npm ci --prefix examples
+npm run validate --prefix examples
+```
+
+Each fixture contains an intentionally buggy learner target, a fixed behavioral reference, reproduction tests, regression tests, and a `fixture.json` outcome manifest. The root `npm run build` remains the production-app check; fixture validation is a separate workflow.
 ## Installation and development
 
 ### Windows

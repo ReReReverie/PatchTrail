@@ -1,0 +1,12 @@
+{
+  "id": "checkout-reliability",
+  "title": "Checkout reliability incident",
+  "difficulty": "mid",
+  "buggyEntrypoint": "buggy-checkout.ts",
+  "fixedEntrypoint": "fixed/buggy-checkout.ts",
+  "transcript": "bug-report-transcript.txt",
+  "bugCategories": ["http-contract", "numeric-safety", "state-machine"],
+  "affectedFiles": ["buggy-checkout.ts", "src/checkout-flow.ts", "src/payment-gateway.ts"],
+  "invariants": ["204 succeeds without JSON parsing", "missing discounts preserve totals", "success hides retry UI"],
+  "regressionCases": ["204 response", "malformed error response", "duplicate submit", "empty discount", "successful payment"]
+}
