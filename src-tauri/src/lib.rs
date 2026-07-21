@@ -1,6 +1,7 @@
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Manager;
 
@@ -375,6 +376,21 @@ async fn response_json(
     serde_json::from_str(&raw).map_err(|_| format!("{provider} returned an unexpected response."))
 }
 
+static AI_CLIENT: OnceLock<Result<reqwest::Client, String>> = OnceLock::new();
+
+fn ai_client() -> Result<&'static reqwest::Client, String> {
+    AI_CLIENT
+        .get_or_init(|| {
+            reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(90))
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .map_err(|_| "Could not initialize the AI client.".to_string())
+        })
+        .as_ref()
+        .map_err(|error| error.clone())
+}
+
 #[tauri::command]
 async fn ai_analyze(
     provider: String,
@@ -403,11 +419,7 @@ async fn ai_analyze(
     }
 
     let prompt = analysis_prompt(&task_title, &task_description, &target_file);
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(90))
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .map_err(|_| "Could not initialize the AI client.".to_string())?;
+    let client = ai_client()?;
 
     let (label, text) = match provider.as_str() {
         "openai" => {
@@ -502,6 +514,14 @@ mod ai_tests {
         assert_eq!(responses_text(&responses).as_deref(), Some("result"));
         assert_eq!(chat_text(&chat).as_deref(), Some("result"));
         assert_eq!(gemini_text(&gemini).as_deref(), Some("result"));
+    }
+
+    #[test]
+    fn reuses_ai_client() {
+        let first = ai_client().expect("AI client should initialize");
+        let second = ai_client().expect("AI client should remain available");
+
+        assert!(std::ptr::eq(first, second));
     }
 }
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

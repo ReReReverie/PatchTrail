@@ -411,11 +411,9 @@ export default function App() {
       return;
     }
 
-    window.setTimeout(() => {
-      setAnalyzedTaskIds((current) => new Set(current).add(task.id));
-      setAnalyzing(false);
-      addActivity("ai", "Analyzed " + task.file + " offline");
-    }, 850);
+    setAnalyzedTaskIds((current) => new Set(current).add(task.id));
+    setAnalyzing(false);
+    addActivity("ai", "Analyzed " + task.file + " offline");
   };
 
   const approveFix = () => {
