@@ -1,9 +1,28 @@
-﻿# Cuttle
+# Cuttle
 
-Cuttle is a software based upon a cuttlefish, a creature that can adapt to its surroundings, the program imitates that trait, programmers usually encounters a lot of obstacles or enemies but Cuttle for programmers would be able to help in adapting in a difficult and sticky situation if there would be problems in their program. Cuttle helps solve bugs, meeting context/issues, and with the use of LLMs you can see the possible problems also would provide the proper solution or fix for the program to work properly. Cuttle also prevents future problems that developers may encounter with the help of Git History, where developers can recover previous history versions of their work to prevent progress loss.
+Cuttle is a local-first desktop GUI that turns messy bug reports, transcripts, and stack traces into actionable tasks, reviewable fixes, regression tests, and safer Git recovery steps.
 
-## Judge quick start — no rebuild required
-Download the latest [Cuttle GitHub Release](https://github.com/ReReReverie/Cuttle/releases/latest) and choose the package for the judge's machine:
+## Project description
+
+Cuttle is a local-first desktop workspace for turning messy engineering context into reviewed action. A developer pastes or imports a meeting transcript, ticket, stack trace, or bug report; Cuttle extracts actionable tasks with owners, priorities, target files, and statuses. Selecting a task opens Bug Detective, which presents a deterministic root-cause explanation, a reviewable before/after diff, and regression-test stubs. Git History is an optional time-machine drawer backed by the selected repository's real local history. Recovery commands are parameterized and copy-only, with hard reset visibly marked destructive. The app works offline by default, optionally supports local open-source models, OpenAI, Gemini, and Grok for richer analysis, follows the system theme, and never changes repository files automatically.
+
+## Table of contents
+
+- [Project description](#project-description)
+- [Judge quick start](#judge-quick-start)
+- [Current capabilities](#current-capabilities)
+- [Safety and product rules](#safety-and-product-rules)
+- [AI providers](#ai-providers)
+  - [AI provider setup](#ai-provider-setup)
+- [Supported platforms](#supported-platforms)
+- [Installation and development](#installation-and-development)
+- [Hackathon submission](#hackathon-submission)
+  - [How Codex and GPT-5.6 Luna were used](#how-codex-and-gpt-56-luna-were-used)
+  - [Developer note](#developer-note)
+
+## Judge quick start
+
+No rebuild is required. Download the latest [Cuttle GitHub Release](https://github.com/ReReReverie/Cuttle/releases/latest) and choose the package for the judge's machine:
 
 | Judge machine | Download | Launch |
 |---|---|---|
@@ -16,54 +35,6 @@ Download the latest [Cuttle GitHub Release](https://github.com/ReReReverie/Cuttl
 The offline demo requires no account, API key, network connection, Node.js, or Rust installation. The application does not modify the selected repository, and every Git recovery command is copy-only.
 
 Use [release/JUDGE_TESTING.md](release/JUDGE_TESTING.md) for the two-minute acceptance checklist and platform launch notes.
-
-## Installation
-
-### Windows
-
-The portable ZIP requires Windows 10/11 x64 and Microsoft Edge WebView2. Extract it to a writable folder and run Cuttle.exe; no administrator access is required. The NSIS setup executable is also available when an installer is preferred. If Windows SmartScreen appears, choose More info, then Run anyway because the prototype is not code-signed.
-
-### macOS
-
-Use the DMG matching the Mac's processor: arm64 for Apple Silicon or x64 for Intel. Drag Cuttle to Applications and open it. The build is ad-hoc signed but not notarized; if macOS blocks it, open System Settings, Privacy & Security, Open Anyway, and then relaunch.
-
-### Linux
-
-The AppImage is the most portable option: make it executable with chmod +x Cuttle-*.AppImage and run it. Use the .deb package on Ubuntu or Debian. AppImage launch may require FUSE on older distributions; the .deb package is the fallback.
-
-### Development setup
-
-Requirements:
-
-- Node.js 20+
-- Rust stable with the MSVC toolchain on Windows
-- Git
-- Microsoft Edge WebView2 Runtime on Windows
-- WebKitGTK 4.1 development packages on Linux
-
-~~~powershell
-npm ci
-npm run desktop
-~~~
-
-Create an optimized native executable:
-
-~~~powershell
-npm run desktop:build
-~~~
-
-Use npm run dev only for React interface work in a browser; repository selection and real Git history require the Tauri desktop window.
-
-## Supported platforms
-
-| Platform | Release target | Validation |
-|---|---|---|
-| Windows 10/11 x64 | Portable ZIP and NSIS installer | Locally smoke-tested and CI-built |
-| macOS 12+ Apple Silicon | Ad-hoc signed DMG | Native macOS CI build and package smoke check |
-| macOS 12+ Intel | Ad-hoc signed DMG | Native macOS CI build and package smoke check |
-| Linux x64 | AppImage and Debian package | Ubuntu 22.04 CI build and package smoke check |
-
-The release workflow runs on native GitHub-hosted runners, so a local Mac or Linux machine is not required to produce these artifacts. The project does not claim manual hardware testing for macOS or Linux.
 
 ## Current capabilities
 
@@ -80,6 +51,16 @@ The release workflow runs on native GitHub-hosted runners, so a local Mac or Lin
 
 No Git recovery command runs automatically. Approving a suggested fix currently completes the task and records the review; it does not modify repository files.
 
+## Safety and product rules
+
+- The main flow is paste context -> identify bug -> review fix -> approve.
+- Advanced features such as Git History remain optional and hidden behind focused buttons.
+- Do not display a numeric confidence score.
+- Review patches before applying them.
+- Never execute `git reset --hard` from the application.
+- Never send `.env`, credentials, or unrelated files to an AI provider.
+- Keep mock/offline mode for demos and tests.
+
 ## AI providers
 
 Cuttle works without AI credentials in **Offline demo** mode. Bug Detective can also use one of four user-controlled providers:
@@ -94,27 +75,6 @@ Cuttle works without AI credentials in **Offline demo** mode. Bug Detective can 
 Provider keys, local tokens, model names, and the local server URL are held in application memory only and are cleared when Cuttle closes. They are never written to localStorage or repository files. Cloud requests contain only the selected task title, description, and target-file path. Cuttle does not scrape consumer chat sites or reuse browser sessions.
 
 The local provider accepts OpenAI-compatible `/v1/chat/completions` servers on `localhost`, `127.0.0.1`, or `::1`. Remote custom hosts, embedded URL credentials, query strings, fragments, and HTTP redirects are rejected by the Rust backend.
-
-## Product rules
-
-- The main flow is paste context → identify bug → review fix → approve.
-- Do not display a numeric confidence score.
-- Git history remains optional and hidden behind a button.
-- Review patches before applying them.
-- Never execute git reset --hard from the application.
-- Never send .env, credentials, or unrelated files to an AI provider.
-- Keep mock/offline mode for demos and tests.
-## Hackathon submission notes
-
-Recommended category: Dev Tools.
-
-Cuttle was brainstormed in Codex, planned in Codex, and built collaboratively with Codex. Codex translated the implementation plan into a native Tauri desktop app, implemented the React workflow and Rust Git bridge, resolved Windows build/toolchain issues, added system-aware theming, created the offline demo fixture, and verified the frontend build, Rust backend, native executable, portable ZIP, and clean-package launch.
-
-Codex accelerated the workflow by keeping the first version deterministic and local: task extraction, patch previews, regression-test stubs, demo history, and the activity ledger work without external API credentials. Key product decisions were made deliberately: advanced features stay behind focused controls, patches require review, and Git recovery commands are copy-only.
-
-Codex Session ID for /feedback: 019f75e1-7962-77c1-89ea-d76694d1d97d
-
-The exact GPT-5.6 model label should be confirmed in the Codex model picker before submitting. The submission package includes SUBMISSION.md and DEMO_VIDEO_SCRIPT.md for the remaining manual hackathon fields.
 
 ### AI provider setup
 
@@ -146,3 +106,79 @@ LM Studio is also supported: load a model, start the local server in its Develop
 2. Choose **Grok API**, paste the key, and use `grok-4.5` or another model available to the API team.
 
 Select an extracted task and click **Analyze bug** after configuration. Judges can test every core workflow in **Offline demo** mode without an account, key, billing, local model installation, or network access.
+
+## Supported platforms
+
+| Platform | Release target | Validation |
+|---|---|---|
+| Windows 10/11 x64 | Portable ZIP and NSIS installer | Locally smoke-tested and CI-built |
+| macOS 12+ Apple Silicon | Ad-hoc signed DMG | Native macOS CI build and package smoke check |
+| macOS 12+ Intel | Ad-hoc signed DMG | Native macOS CI build and package smoke check |
+| Linux x64 | AppImage and Debian package | Ubuntu 22.04 CI build and package smoke check |
+
+The release workflow runs on native GitHub-hosted runners, so a local Mac or Linux machine is not required to produce these artifacts. The project does not claim manual hardware testing for macOS or Linux.
+
+## Installation and development
+
+### Windows
+
+The portable ZIP requires Windows 10/11 x64 and Microsoft Edge WebView2. Extract it to a writable folder and run Cuttle.exe; no administrator access is required. The NSIS setup executable is also available when an installer is preferred. If Windows SmartScreen appears, choose More info, then Run anyway because the prototype is not code-signed.
+
+### macOS
+
+Use the DMG matching the Mac's processor: arm64 for Apple Silicon or x64 for Intel. Drag Cuttle to Applications and open it. The build is ad-hoc signed but not notarized; if macOS blocks it, open System Settings, Privacy & Security, Open Anyway, and then relaunch.
+
+### Linux
+
+The AppImage is the most portable option: make it executable with `chmod +x Cuttle-*.AppImage` and run it. Use the .deb package on Ubuntu or Debian. AppImage launch may require FUSE on older distributions; the .deb package is the fallback.
+
+### Development setup
+
+Requirements:
+
+- Node.js 20+
+- Rust stable with the MSVC toolchain on Windows
+- Git
+- Microsoft Edge WebView2 Runtime on Windows
+- WebKitGTK 4.1 development packages on Linux
+
+~~~powershell
+npm ci
+npm run desktop
+~~~
+
+Create an optimized native executable:
+
+~~~powershell
+npm run desktop:build
+~~~
+
+Use `npm run dev` only for React interface work in a browser; repository selection and real Git history require the Tauri desktop window.
+
+## Hackathon submission
+
+Recommended category: Dev Tools.
+
+### Repository and judge packages
+
+- Repository: https://github.com/ReReReverie/Cuttle
+- Native downloads: https://github.com/ReReReverie/Cuttle/releases/latest
+- Judge checklist: [release/JUDGE_TESTING.md](release/JUDGE_TESTING.md)
+- Release targets: Windows x64, macOS Apple Silicon, macOS Intel, and Linux x64
+- Validation: Windows is locally smoke-tested; macOS and Linux packages are built and smoke-checked by native CI runners, with no manual hardware-testing claim
+
+### How Codex and GPT-5.6 Luna were used
+
+Cuttle started as a Codex brainstorming project before becoming an implementation plan in the Patchtrail-OpenAI workspace. The early Codex conversations shaped the core idea: a developer helper that adapts to messy engineering situations by turning issue context into tasks, explaining likely bugs, generating reviewable patch/test guidance, and making Git recovery less risky.
+
+ChatGPT/GPT-5.6 Luna was used in Max, High, and XHigh reasoning modes during development. Luna helped refine the product direction from the original web-dashboard concept into an actual native GUI application, then helped translate the plan into the Tauri + React + Rust implementation. Codex accelerated the build by implementing the desktop UI, Rust Git bridge, file-import path, AI-provider onboarding, offline demo mode, regression-test examples, judge package, and release documentation.
+
+The main product and engineering decisions stayed deliberate throughout the Codex sessions: Cuttle works offline by default, advanced features sit behind focused buttons to keep the interface clean, suggested fixes are review-only unless the developer acts, Git recovery commands are copy-only, and credentials for optional AI providers are held in memory instead of being saved to disk.
+
+Codex also supported the polish and submission work: resolving Windows desktop build issues, validating the frontend and Rust backend, building the native executable and portable ZIP, preparing judge testing notes, and documenting how OpenAI, local open-source, Gemini, and Grok providers can be tested.
+
+Codex Session ID for /feedback: 019f75e1-7962-77c1-89ea-d76694d1d97d
+
+### Developer Note
+
+We'll be real honest, were sure the windows.exe will work, but we dont know if the others will as we do not own a macbook, or use linux
